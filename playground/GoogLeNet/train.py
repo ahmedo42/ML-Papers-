@@ -1,12 +1,13 @@
+import argparse
+import math
+
+import torch
+import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.tensorboard import SummaryWriter
-import torch
-import torch.nn as nn
-import math
-import argparse
-from GoogLeNet import GoogLeNet
 
+from GoogLeNet import GoogLeNet
 
 parser = argparse.ArgumentParser(
     description="configure training hyperparameters")

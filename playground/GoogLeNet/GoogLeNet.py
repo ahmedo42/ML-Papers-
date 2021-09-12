@@ -1,10 +1,12 @@
+import math
+from typing import Callable, Optional
+
 import torch
 import torch.nn as nn
-from torch import Tensor
 import torch.nn.functional as F
-from typing import Callable, Optional
-from Inception import Inception,Conv2d
-import math
+from Inception import Conv2d, Inception
+from torch import Tensor
+
 
 class GoogLeNet(nn.Module):
     def __init__(self, n_classes=1000, aux_logits=False):

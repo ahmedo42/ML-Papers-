@@ -1,29 +1,27 @@
-Implementation of seminal papers and ideas in Deep Learning and Artificial Intelligence 
+Implementation of seminal papers and ideas in Deep Learning
 
 
-## Computer Vision
-* VGG16  [[Paper](https://arxiv.org/abs/1409.1556)] [[Code](./VGG)]
-* ResNet [[Paper](https://arxiv.org/abs/1512.03385)] [[Code](./ResNet)]
-* GoogLenet [[Paper](https://arxiv.org/abs/1409.1556)] [[Code](./GoogLeNet)]
+## Image Classification
+* VGG16  [[Paper](https://arxiv.org/abs/1409.1556)] [[Code](playground/VGG)]
+* ResNet [[Paper](https://arxiv.org/abs/1512.03385)] [[Code](playground/ResNet)]
+* GoogLenet [[Paper](https://arxiv.org/abs/1409.1556)] [[Code](playground/GoogLeNet)]
 * MobileNet 
-* FCN 
-* DeepLab 
-* GAN 
-* CycleGan  
+
+## Object Detection
 * RCNN 
-* YOLO 
+* Fast-RCNN
+* Faster-RCNN
+* YOLO
 
-## Natural Language Processing
-
-* Transformer (original) 
+## GAN
+* Vanilla GAN 
+* CycleGan
+* StyleGan
+## NLP
+* Transformer (Attention is all you need) 
 * GPT 
   
 ## Reinforcement Learning
-
+* REINFORCE ( Vanilla Policy Gradient )[[Reference](https://spinningup.openai.com/en/latest/algorithms/vpg.html#vanilla-policy-gradient)] [[Code](playground/rl/REINFORCE)]
 * DQN
 * A2C
-
-## Metaheuristics
-
-* Simulated Annealing 
-* Ant Colony Optimization
