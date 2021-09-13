@@ -11,22 +11,22 @@ from torch import Tensor
 class GoogLeNet(nn.Module):
     def __init__(self, n_classes=1000, aux_logits=False):
         super(GoogLeNet, self).__init__()
-        self.conv1 = Conv2d(3, 64,kernel_size=7,stride=2,padding=3)
-        self.max_pool1 = nn.MaxPool2d(kernel_size=3, stride=2,ceil_mode=True)
+        self.conv1 = Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
+        self.max_pool1 = nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True)
         self.conv2 = Conv2d(64, 64, kernel_size=1)
         self.conv3 = Conv2d(64, 192, kernel_size=3, padding=1)
-        self.max_pool2 = nn.MaxPool2d(kernel_size=3, stride=2,ceil_mode=True)
+        self.max_pool2 = nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True)
 
         self.inception_3a = Inception(192, 64, 96, 128, 16, 32, 32)
         self.inception_3b = Inception(256, 128, 128, 192, 32, 96, 64)
-        self.max_pool3 = nn.MaxPool2d(kernel_size=3, stride=2,ceil_mode=True)
+        self.max_pool3 = nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True)
 
         self.inception_4a = Inception(480, 192, 96, 208, 16, 48, 64)
         self.inception_4b = Inception(512, 160, 112, 224, 24, 64, 64)
         self.inception_4c = Inception(512, 128, 128, 256, 24, 64, 64)
         self.inception_4d = Inception(512, 112, 144, 288, 32, 64, 64)
         self.inception_4e = Inception(528, 256, 160, 320, 32, 128, 128)
-        self.max_pool4 = nn.MaxPool2d(kernel_size=2, stride=2,ceil_mode=True)
+        self.max_pool4 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)
 
         self.inception_5a = Inception(832, 256, 160, 320, 32, 128, 128)
         self.inception_5b = Inception(832, 384, 192, 384, 48, 128, 128)
@@ -43,8 +43,7 @@ class GoogLeNet(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-
+                m.weight.data.normal_(0, math.sqrt(2.0 / n))
 
     def forward(self, x):
         x = self.conv1(x)
@@ -81,7 +80,6 @@ class GoogLeNet(nn.Module):
         x = self.dropout(x)
         x = self.fc(x)
         return x, aux1, aux2
-
 
 
 class InceptionAux(nn.Module):

@@ -1,6 +1,7 @@
 import numpy as np
 import torch
-from playground.rl.utils import make_mlp , combined_shape , discount_cumsum
+
+from playground.rl.utils import combined_shape, discount_cumsum, make_mlp
 
 
 class VPGBuffer:
@@ -11,11 +12,13 @@ class VPGBuffer:
     """
 
     def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95):
-        self.observation_buffer = np.zeros(combined_shape(size, obs_dim), dtype=np.float32)
+        self.observation_buffer = np.zeros(
+            combined_shape(size, obs_dim), dtype=np.float32
+        )
         self.actions_buffer = np.zeros(combined_shape(size, act_dim), dtype=np.float32)
         self.advantage_buffer = np.zeros(size, dtype=np.float32)
         self.reward_buffer = np.zeros(size, dtype=np.float32)
-        self.ret_buf = np.zeros(size, dtype=np.float32)
+        self.reward_to_go_buffer = np.zeros(size, dtype=np.float32)
         self.val_buf = np.zeros(size, dtype=np.float32)
         self.logp_buffer = np.zeros(size, dtype=np.float32)
         self.gamma, self.lam = gamma, lam
@@ -25,7 +28,7 @@ class VPGBuffer:
         """
         Append one timestep of agent-environment interaction to the buffer.
         """
-        assert self.ptr < self.max_size     # buffer has to have room so you can store
+        assert self.ptr < self.max_size  # buffer has to have room so you can store
         self.observation_buffer[self.ptr] = obs
         self.actions_buffer[self.ptr] = act
         self.reward_buffer[self.ptr] = rew
@@ -52,14 +55,16 @@ class VPGBuffer:
         path_slice = slice(self.path_start_idx, self.ptr)
         rewards = np.append(self.reward_buffer[path_slice], last_val)
         vals = np.append(self.val_buf[path_slice], last_val)
-        
+
         # the next two lines implement GAE-Lambda advantage calculation
         deltas = rewards[:-1] + self.gamma * vals[1:] - vals[:-1]
-        self.advantage_buffer[path_slice] = discount_cumsum(deltas, self.gamma * self.lam)
-        
+        self.advantage_buffer[path_slice] = discount_cumsum(
+            deltas, self.gamma * self.lam
+        )
+
         # the next line computes rewards-to-go, to be targets for the value function
-        self.ret_buf[path_slice] = discount_cumsum(rewards, self.gamma)[:-1]
-        
+        self.reward_to_go_buffer[path_slice] = discount_cumsum(rewards, self.gamma)[:-1]
+
         self.path_start_idx = self.ptr
 
     def get(self):
@@ -68,11 +73,18 @@ class VPGBuffer:
         the buffer, with advantages appropriately normalized (shifted to have
         mean zero and std one). Also, resets some pointers in the buffer.
         """
-        assert self.ptr == self.max_size    # buffer has to be full before you can get
+        assert self.ptr == self.max_size  # buffer has to be full before you can get
         self.ptr, self.path_start_idx = 0, 0
         # the next two lines implement the advantage normalization trick
-        adv_mean, adv_std = np.mean(self.advantage_buffer) , np.std(self.advantage_buffer)
+        adv_mean, adv_std = np.mean(self.advantage_buffer), np.std(
+            self.advantage_buffer
+        )
         self.advantage_buffer = (self.advantage_buffer - adv_mean) / adv_std
-        data = dict(obs=self.observation_buffer, act=self.actions_buffer, ret=self.ret_buf,
-                    adv=self.advantage_buffer, logp=self.logp_buffer)
-        return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
+        data = dict(
+            obs=self.observation_buffer,
+            act=self.actions_buffer,
+            ret=self.reward_to_go_buffer,
+            adv=self.advantage_buffer,
+            logp=self.logp_buffer,
+        )
+        return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in data.items()}
