@@ -1,4 +1,5 @@
 import scipy.signal
+import torch
 import torch.nn as nn
 from gym.spaces import Box, Discrete
 
@@ -10,7 +11,7 @@ class MLPActorCritic(nn.Module):
     def __init__(
         self, observation_space, action_space, hidden_sizes=(64, 64), activation=nn.Tanh
     ):
-
+        super().__init__()
         obs_dim = observation_space.shape[0]
         if isinstance(action_space, Discrete):
             self.pi = MLPCategoricalActor(

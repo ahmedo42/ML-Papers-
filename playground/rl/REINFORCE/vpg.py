@@ -1,9 +1,11 @@
 import gym
 import numpy as np
 import torch
+import time
 from torch.optim import Adam
 from playground.rl.buffers import VPGBuffer
 from playground.rl.policies import MLPActorCritic
+from playground.rl.logger import EpochLogger
 
 
 class VPG:
@@ -11,8 +13,8 @@ class VPG:
         self,
         env: gym.Env,
         ac_policy: str = "mlp",
-        seed: int = 17,
         ac_kwargs: dict = dict(),
+        logger_kwargs: dict = dict()
     ):
         self.env = env
         self.buffer = VPGBuffer(env.observation_space.shape, env.action_space.shape, 4000)
@@ -21,7 +23,8 @@ class VPG:
             self.model = MLPActorCritic(
                 env.observation_space, env.action_space, **ac_kwargs
             )
-        self.policy_optimizer = Adam)
+        
+
 
         
     def train(
@@ -32,15 +35,32 @@ class VPG:
         gamma: float = 0.99,
         policy_lr: float = 3e-4,
         vf_lr: float = 1e-3,
+        train_value_steps: int =80,
         adv_lambda: int = 0.97,
+        seed: int = 17,
+        save_freq = 10,
+        logger_kwargs : dict = dict()
     ):
+
+        logger_kwargs['output_dir'] = f"./experiments/{self.env.unwrapped.__class__.__name__}/{self.__class__.__name__}/{seed}"
+        self.logger = EpochLogger(**logger_kwargs)
+        self.logger.setup_pytorch_saver(self.model)
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        self.policy_optimizer = Adam(self.model.pi.parameters(),lr=policy_lr)
+        self.value_optimizer = Adam(self.model.v.parameters(),lr=vf_lr)
+        self.value_steps = train_value_steps
         observation = self.env.reset()
         episode_length = 0
+        episode_ret = 0 # reward-to-go
         for epoch in range(epochs):
+            start_time = time.time()
             for step in range(steps_per_epoch):
-                action , value , logp = self.model.act(observation)
+                observation = torch.as_tensor(observation,dtype=torch.float32)
+                action , value , logp = self.model.step(observation)
                 next_observation , reward , done , info = self.env.step(action)
                 episode_length += 1
+                episode_ret += reward
 
                 self.buffer.store(observation,action,reward,value,logp)
 
@@ -59,45 +79,73 @@ class VPG:
                     else:
                         v = 0
                     self.buffer.finish_path(v)
+                    if terminal:
+                        self.logger.store(EpRet=episode_ret, EpLen=episode_length)
                     observation, ep_ret, episode_length = self.env.reset(), 0, 0
 
 
+            # Save model
+            if (epoch % save_freq == 0) or (epoch == epochs-1):
+                self.logger.save_state({'env': self.env}, None)
+            
+            # gradient descent
             self._update()
+
+            #log statistics
+            self.logger.log_tabular('Epoch', epoch)
+            self.logger.log_tabular('EpRet', with_min_and_max=True)
+            self.logger.log_tabular('EpLen', average_only=True)
+            self.logger.log_tabular('LossPi', average_only=True)
+            self.logger.log_tabular('LossV', average_only=True)
+            self.logger.log_tabular('DeltaLossPi', average_only=True)
+            self.logger.log_tabular('DeltaLossV', average_only=True)
+            self.logger.log_tabular('Entropy', average_only=True)
+            self.logger.log_tabular('KL', average_only=True)
+            self.logger.log_tabular('Time', time.time()-start_time)
+            self.logger.dump_tabular()
 
     def _update(self):
         data = self.buffer.get()
 
         # Get loss and info values before update
-        pi_l_old, pi_info_old = self._compute_policy_loss(data)
-        pi_l_old = pi_l_old.item()
-        v_l_old = self._compute_value_loss(data).item()
+        policy_loss_old, pi_info_old = self._compute_policy_loss(data)
+        policy_loss_old = policy_loss_old.item()
+        value_loss_old = self._compute_value_loss(data).item()
 
         # Train policy with a single step of gradient descent
-        pi_optimizer.zero_grad()
-        loss_pi, pi_info = compute_loss_pi(data)
-        loss_pi.backward()
-        mpi_avg_grads(ac.pi)    # average grads across MPI processes
-        pi_optimizer.step()
+        self.policy_optimizer.zero_grad()
+        policy_loss, pi_info = self._compute_policy_loss(data)
+        policy_loss.backward()
+        self.policy_optimizer.step()
 
         # Value function learning
-        for i in range(train_v_iters):
-            vf_optimizer.zero_grad()
-            loss_v = compute_loss_v(data)
-            loss_v.backward()
-            mpi_avg_grads(ac.v)    # average grads across MPI processes
-            vf_optimizer.step()
+        for i in range(self.value_steps):
+            self.value_optimizer.zero_grad()
+            value_loss = self._compute_value_loss(data)
+            value_loss.backward()
+            self.value_optimizer.step()
 
-        # Log changes from update
-        kl, ent = pi_info['kl'], pi_info_old['ent']
-        logger.store(LossPi=pi_l_old, LossV=v_l_old,
-                     KL=kl, Entropy=ent,
-                     DeltaLossPi=(loss_pi.item() - pi_l_old),
-                     DeltaLossV=(loss_v.item() - v_l_old))
-    def _log(self):
-        pass
+        kl_divergence, entropy = pi_info['kl'], pi_info_old['ent']
+        self.logger.store(LossPi=policy_loss_old, LossV=value_loss_old,
+                     KL=kl_divergence, Entropy=entropy,
+                     DeltaLossPi=(policy_loss.item() - policy_loss_old),
+                     DeltaLossV=(value_loss.item() - value_loss_old))
 
-    def _compute_policy_loss(self):
-        pass
 
-    def _compute_value_loss(self):
-        pass
+    def _compute_policy_loss(self,data):
+        obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
+
+        # Policy loss
+        pi, logp = self.model.pi(obs, act)
+        loss_pi = -(logp * adv).mean()
+
+        # Useful extra info
+        approx_kl = (logp_old - logp).mean().item()
+        ent = pi.entropy().mean().item()
+        pi_info = dict(kl=approx_kl, ent=ent)
+
+        return loss_pi, pi_info
+
+    def _compute_value_loss(self,data):
+        obs, ret = data['obs'], data['ret']
+        return ((self.model.v(obs) - ret)**2).mean()
