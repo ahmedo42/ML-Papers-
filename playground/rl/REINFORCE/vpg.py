@@ -13,16 +13,15 @@ class VPG:
         self,
         env: gym.Env,
         ac_policy: str = "mlp",
-        ac_kwargs: dict = dict(),
-        logger_kwargs: dict = dict()
-    ):
+        ac_kwargs: dict = dict()
+         ):
         self.env = env
-        self.buffer = VPGBuffer(env.observation_space.shape, env.action_space.shape, 4000)
         self.model = None
         if ac_policy == "mlp":
             self.model = MLPActorCritic(
                 env.observation_space, env.action_space, **ac_kwargs
             )
+            
         
 
 
@@ -33,28 +32,32 @@ class VPG:
         steps_per_epoch: int = 4000,
         max_episode_len: int = 1000,
         gamma: float = 0.99,
+        adv_lambda: int = 0.95,
         policy_lr: float = 3e-4,
         vf_lr: float = 1e-3,
-        train_value_steps: int =80,
-        adv_lambda: int = 0.97,
+        train_value_steps: int = 80,
         seed: int = 17,
-        save_freq = 10,
+        save_freq: int = 10,
         logger_kwargs : dict = dict()
     ):
 
-        logger_kwargs['output_dir'] = f"./experiments/{self.env.unwrapped.__class__.__name__}/{self.__class__.__name__}/{seed}"
-        self.logger = EpochLogger(**logger_kwargs)
-        self.logger.setup_pytorch_saver(self.model)
         torch.manual_seed(seed)
         np.random.seed(seed)
+        logger_kwargs['output_dir'] = f"./experiments/{self.env.unwrapped.__class__.__name__}/{self.__class__.__name__}/{seed}"
+
+        self.logger = EpochLogger(**logger_kwargs)
+        self.logger.setup_pytorch_saver(self.model)
+        self.buffer = VPGBuffer(self.env.observation_space.shape, self.env.action_space.shape, steps_per_epoch,gamma,adv_lambda)
         self.policy_optimizer = Adam(self.model.pi.parameters(),lr=policy_lr)
         self.value_optimizer = Adam(self.model.v.parameters(),lr=vf_lr)
         self.value_steps = train_value_steps
+
+
         observation = self.env.reset()
+        start_time = time.time()
         episode_length = 0
         episode_ret = 0 # reward-to-go
         for epoch in range(epochs):
-            start_time = time.time()
             for step in range(steps_per_epoch):
                 observation = torch.as_tensor(observation,dtype=torch.float32)
                 action , value , logp = self.model.step(observation)
@@ -81,14 +84,14 @@ class VPG:
                     self.buffer.finish_path(v)
                     if terminal:
                         self.logger.store(EpRet=episode_ret, EpLen=episode_length)
-                    observation, ep_ret, episode_length = self.env.reset(), 0, 0
+                    observation, episode_ret, episode_length = self.env.reset(), 0, 0
 
 
             # Save model
             if (epoch % save_freq == 0) or (epoch == epochs-1):
                 self.logger.save_state({'env': self.env}, None)
             
-            # gradient descent
+            # update parameters
             self._update()
 
             #log statistics

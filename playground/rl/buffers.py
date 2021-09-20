@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from playground.rl.utils import combined_shape, discount_cumsum, make_mlp
+from playground.rl.utils import combined_shape, discount_cumsum, make_mlp , get_stats
 
 
 class VPGBuffer:
@@ -11,7 +11,7 @@ class VPGBuffer:
     for calculating the advantages of state-action pairs.
     """
 
-    def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95):
+    def __init__(self, obs_dim, act_dim, size, gamma=0.99, advantage_lambda=0.95):
         self.observation_buffer = np.zeros(
             combined_shape(size, obs_dim), dtype=np.float32
         )
@@ -21,7 +21,7 @@ class VPGBuffer:
         self.reward_to_go_buffer = np.zeros(size, dtype=np.float32)
         self.val_buf = np.zeros(size, dtype=np.float32)
         self.logp_buffer = np.zeros(size, dtype=np.float32)
-        self.gamma, self.lam = gamma, lam
+        self.gamma, self.advantage_lambda = gamma, advantage_lambda
         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
 
     def store(self, obs, act, rew, val, logp):
@@ -59,7 +59,7 @@ class VPGBuffer:
         # the next two lines implement GAE-Lambda advantage calculation
         deltas = rewards[:-1] + self.gamma * vals[1:] - vals[:-1]
         self.advantage_buffer[path_slice] = discount_cumsum(
-            deltas, self.gamma * self.lam
+            deltas, self.gamma * self.advantage_lambda
         )
 
         # the next line computes rewards-to-go, to be targets for the value function
@@ -76,9 +76,8 @@ class VPGBuffer:
         assert self.ptr == self.max_size  # buffer has to be full before you can get
         self.ptr, self.path_start_idx = 0, 0
         # the next two lines implement the advantage normalization trick
-        adv_mean, adv_std = np.mean(self.advantage_buffer), np.std(
-            self.advantage_buffer
-        )
+        adv_mean, adv_std = get_stats(self.advantage_buffer)
+        
         self.advantage_buffer = (self.advantage_buffer - adv_mean) / adv_std
         data = dict(
             obs=self.observation_buffer,

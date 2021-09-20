@@ -89,8 +89,9 @@ class Logger:
             assert key in self.log_headers, "Trying to introduce a new key %s that you didn't include in the first iteration"%key
         assert key not in self.log_current_row, "You already set %s this iteration. Maybe you forgot to call dump_tabular()"%key
         self.log_current_row[key] = val
-        self.writer.add_scalar(key,val,self.log_current_row['Epoch'])
-        self.writer.close()
+        if 'Epoch' in self.log_current_row:
+            self.writer.add_scalar(key,val,self.log_current_row['Epoch'])
+            self.writer.close()
 
     def save_config(self, config):
         """
